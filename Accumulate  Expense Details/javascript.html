@@ -1,0 +1,259 @@
+<script>
+  // ========== Generate Transaction ID ==========
+    const TRANSACTION_PREFIX = "AE";
+  function generateTransactionId() {
+    const randomPart = Math.floor(100000 + Math.random() * 900000); // 6-digit number
+    const transactionId = `${TRANSACTION_PREFIX}${randomPart}`;
+    document.getElementById("transactionId").value = transactionId;
+  }
+
+  // ========== Handle Form Submission ==========
+  function handleFromSubmit(e) {
+    e.preventDefault();
+    const form = document.getElementById("transactionForm");
+
+    google.script.run
+      .withSuccessHandler(() => {
+        form.reset();
+        generateTransactionId();
+        document.getElementById("totalAmount").innerHTML = 0;
+
+        // Clear all description fields and add a fresh one
+        document.getElementById("descriptionFields").innerHTML = "";
+        addDescription();
+
+         // Reset dropdown to blank by re-rendering
+    setDescriptionOptions(descriptionList);
+      })
+      .withFailureHandler(err => {
+        console.error(err);
+        alert("Form submission failed.");
+      })
+      .processFrom(form);
+  }
+
+  // ========== Add Description Row ==========
+  function addDescription() {
+    const container = document.getElementById("descriptionFields");
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "flex flex-col sm:flex-row gap-4";
+
+    const select = document.createElement("select");
+    select.name = "debCre[]";
+    select.className = "w-full sm:w-40 border px-3 py-2";
+    select.required = true;
+    const option1 = new Option("Debit", "Debit");
+    const option2 = new Option("Credit", "Credit");
+    select.appendChild(option1);
+    select.appendChild(option2);
+
+    const textarea = document.createElement("textarea");
+    textarea.name = "description[]";
+    textarea.rows = 1;
+    textarea.placeholder = "Accumulate / Expense Details";
+    textarea.className = "w-full border px-3 py-2";
+
+    const amountInput = document.createElement("input");
+    amountInput.name = "amount[]";
+    amountInput.type = "number";
+    amountInput.placeholder = "Amount";
+    amountInput.className = "w-full sm:w-40 border px-3 py-2";
+    amountInput.required = true;
+
+    amountInput.addEventListener("input", calculateTotal);
+
+    wrapper.appendChild(select);
+    wrapper.appendChild(textarea);
+    wrapper.appendChild(amountInput);
+
+    container.appendChild(wrapper);
+  }
+
+  // ========== Calculate Total Amount ==========
+  function calculateTotal() {
+    const amountInputs = document.querySelectorAll("input[name='amount[]']");
+    let total = 0;
+    amountInputs.forEach(input => {
+      const value = parseFloat(input.value);
+      if (!isNaN(value)) total += value;
+    });
+    document.getElementById("totalAmount").textContent = total.toFixed(2);
+  }
+
+  // ========== PDF View ==========
+  async function viewPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    const blue = [56, 116, 203];
+    const gray = [100];
+    const dark = [33, 33, 33];
+    const green = [0, 128, 0];
+
+    const transactionId = document.getElementById("transactionId").value;
+    const date = document.querySelector("input[name='date']").value;
+    const unit = document.querySelector("input[name='unit']").value;
+    const registerPage = document.querySelector("input[name='registerPage']").value;
+
+    const debCres = document.querySelectorAll("select[name='debCre[]']");
+    const descriptions = document.querySelectorAll("textarea[name='description[]']");
+    const amounts = document.querySelectorAll("input[name='amount[]']");
+
+    // Header
+    doc.setFillColor(...blue);
+    doc.rect(0, 0, 210, 20, 'F');
+    doc.setFontSize(16);
+    doc.setTextColor(255);
+    doc.setFont("helvetica", "bold");
+    doc.text("Nuton Kuri Pre-Cadet", 105, 12, null, null, "center");
+
+    doc.setFontSize(13);
+    doc.setTextColor(...dark);
+    doc.text("Transaction Report", 105, 28, null, null, "center");
+
+    let y = 36;
+    doc.setFontSize(11);
+    doc.setTextColor(...gray);
+
+    const info = [
+      [`Transaction ID`, transactionId],
+      [`Date`, date],
+      [`Unit`, unit],
+      [`Register Page`, registerPage]
+    ];
+
+    info.forEach(([label, value]) => {
+      doc.text(`${label}:`, 20, y);
+      doc.setTextColor(...dark);
+      doc.text(`${value}`, 60, y);
+      doc.setTextColor(...gray);
+      y += 8;
+    });
+
+    y += 4;
+
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...blue);
+    doc.text("Type", 20, y);
+    doc.text("Description", 60, y);
+    doc.text("Amount", 180, y, null, null, "right");
+    y += 6;
+    doc.line(20, y, 190, y);
+    y += 6;
+
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...dark);
+
+    let total = 0;
+    for (let i = 0; i < descriptions.length; i++) {
+      const debCre = debCres[i].value || "";
+      const desc = descriptions[i].value || "";
+      const amt = parseFloat(amounts[i].value) || 0;
+      total += amt;
+
+      doc.text(debCre, 20, y);
+      doc.text(desc, 60, y);
+      doc.text(`${amt.toFixed(2)}`, 180, y, null, null, "right");
+      y += 8;
+    }
+
+    y += 2;
+    doc.line(20, y, 190, y);
+    y += 6;
+
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...green);
+    doc.text("Total Amount", 60, y);
+    doc.text(`${total.toFixed(2)} TAKA`, 180, y, null, null, "right");
+
+    y += 20;
+    doc.setTextColor(...gray);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "italic");
+    doc.text("Generated by RubidSoft Smart Fee System", 105, y, null, null, "center");
+
+    const blob = doc.output("blob");
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+  }
+ 
+  let descriptionList = [];
+
+  function setDescriptionOptions(data) {
+    descriptionList = data;
+    // Update all current textarea fields to dropdown
+    const textareas = document.querySelectorAll("textarea[name='description[]']");
+    textareas.forEach((ta, i) => {
+      const select = createDescriptionDropdown();
+      select.name = "description[]";
+      select.className = ta.className;
+      ta.replaceWith(select);
+    });
+  }
+
+function createDescriptionDropdown() {
+  const select = document.createElement("select");
+  select.required = true;
+  select.className = "w-full border px-3 py-2";
+
+  // Add default blank option
+  const blankOption = document.createElement("option");
+  blankOption.value = "";
+  blankOption.textContent = "-- Accumulate / Expense Details --";
+  blankOption.disabled = false;
+  blankOption.selected = true;
+  select.appendChild(blankOption);
+
+  descriptionList.forEach(text => {
+    const option = document.createElement("option");
+    option.value = option.textContent = text;
+    select.appendChild(option);
+  });
+
+  return select;
+}
+
+
+  // update inside addDescription()
+  function addDescription() {
+    const container = document.getElementById("descriptionFields");
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "flex flex-col sm:flex-row gap-4";
+
+    const select = document.createElement("select");
+    select.name = "debCre[]";
+    select.className = "w-full sm:w-40 border px-3 py-2";
+    select.required = true;
+    const option1 = new Option("Debit", "Debit");
+    const option2 = new Option("Credit", "Credit");
+    select.appendChild(option1);
+    select.appendChild(option2);
+
+    const descriptionDropdown = createDescriptionDropdown();
+    descriptionDropdown.name = "description[]";
+    descriptionDropdown.className = "w-full border px-3 py-2";
+
+    const amountInput = document.createElement("input");
+    amountInput.name = "amount[]";
+    amountInput.type = "number";
+    amountInput.placeholder = "Amount";
+    amountInput.className = "w-full sm:w-40 border px-3 py-2";
+    amountInput.required = true;
+    amountInput.addEventListener("input", calculateTotal);
+
+    wrapper.appendChild(select);
+    wrapper.appendChild(descriptionDropdown);
+    wrapper.appendChild(amountInput);
+
+    container.appendChild(wrapper);
+  } 
+
+
+
+window.onload = function () {
+  generateTransactionId();
+  google.script.run.withSuccessHandler(setDescriptionOptions).getDescriptions();
+};
+</script>
