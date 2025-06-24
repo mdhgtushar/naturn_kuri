@@ -1,0 +1,297 @@
+<script>
+  // Generate 6-digit Transaction ID
+  function generateTransactionId() {
+    const id = Math.floor(100000 + Math.random() * 900000);
+    document.getElementById("transactionId").value = id;
+  }
+
+  
+ 
+  function fetchStudentInfo() {
+    const studentId = document.getElementById("studentId").value.trim();
+
+    if (!studentId) {
+      alert("Please enter a Student ID.");
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(function(data) {
+        if (data.error) {
+          alert(data.error);
+        } else { 
+          document.getElementById("studentName").value = data.name || "";
+          document.querySelector("[name='pageNo']").value = data.pageNo || "";
+          document.querySelector("[name='unit']").value = data.unit || "";
+          document.querySelector("[name='class']").value = data.class || "";
+          document.querySelector("[name='classRoll']").value = data.classRoll || "";
+          document.querySelector("[name='externalNo']").value = data.externalNo || "";
+          document.querySelector("[name='registerPage']").value = data.registerPage || ""; 
+        }
+      })
+      .getStudentInfo(studentId);
+  } 
+
+
+  // Handle form submission
+  function handleFromSubmit(e) {
+    e.preventDefault();
+    const form = document.getElementById("transactionForm");
+    google.script.run
+      .withSuccessHandler(() => { 
+        form.reset();
+        generateTransactionId();
+        document.getElementById("totalAmount").innerHTML = 0;
+
+ // ✅ Clear and reset description fields
+      document.getElementById("descriptionFields").innerHTML = "";
+      addDescription(); // Re-add one fresh row
+      })
+      .withFailureHandler((err) => {
+        console.error(err);
+        alert("Failed to submit form.");
+      })
+      .processFrom(form);
+
+  }
+
+  
+
+  window.onload = generateTransactionId;
+
+
+
+  let descriptionOptions = [];
+
+  function loadDescriptions() {
+    google.script.run.withSuccessHandler(function(data) {
+      descriptionOptions = data;
+      populateFirstDropdown(); // Populate the initial dropdown
+    }).getDescriptions();
+  }
+
+  function populateFirstDropdown() {
+    const container = document.getElementById("descriptionFields");
+    container.innerHTML = ""; // Clear existing
+    addDescription(); // Add with dropdown
+  }
+
+  function addDescription() {
+    const container = document.getElementById("descriptionFields");
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "flex flex-col md:flex-row gap-4";
+
+    // Create dropdown
+    const select = document.createElement("select");
+    select.name = "description[]";
+    select.className = "w-full border rounded-lg px-3 py-2";
+    const defaultOption = document.createElement("option");
+    defaultOption.text = "Select Description";
+    defaultOption.disabled = true;
+    defaultOption.selected = true;
+    select.appendChild(defaultOption);
+
+    descriptionOptions.forEach(desc => {
+      const option = document.createElement("option");
+      option.value = desc;
+      option.text = desc;
+      select.appendChild(option);
+    });
+
+    // Create amount input
+    const amountInput = document.createElement("input");
+    amountInput.name = "amount[]";
+    amountInput.type = "number";
+    amountInput.placeholder = "Amount";
+    amountInput.className = "w-full md:w-40 border rounded-lg px-3 py-2";
+
+    wrapper.appendChild(select);
+    wrapper.appendChild(amountInput);
+    container.appendChild(wrapper);
+  }
+
+  // Other functions like fetchStudentInfo, generateTransactionId, etc...
+
+  window.onload = function() {
+    generateTransactionId();
+    loadDescriptions(); // Call this to load dropdown data
+  };
+
+  // Total Calculation Function
+function calculateTotal() {
+  const amountInputs = document.querySelectorAll("input[name='amount[]']");
+  let total = 0;
+  amountInputs.forEach(input => {
+    const value = parseFloat(input.value);
+    if (!isNaN(value)) total += value;
+  });
+  document.getElementById("totalAmount").textContent = total.toFixed(2);
+}
+// Add listener when new input added
+function addListenersToAmountInputs() {
+  const amountInputs = document.querySelectorAll("input[name='amount[]']");
+  amountInputs.forEach(input => {
+    input.removeEventListener('input', calculateTotal);
+    input.addEventListener('input', calculateTotal);
+  });
+}
+
+// Modify addDescription function to call above
+function addDescription() {
+  const container = document.getElementById("descriptionFields");
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "flex flex-col md:flex-row gap-4";
+
+  // Create dropdown
+  const select = document.createElement("select");
+  select.name = "description[]";
+  select.className = "w-full border rounded-lg px-3 py-2";
+  const defaultOption = document.createElement("option");
+  defaultOption.text = "Select Description";
+  defaultOption.disabled = true;
+  defaultOption.selected = true;
+  select.appendChild(defaultOption);
+
+  descriptionOptions.forEach(desc => {
+    const option = document.createElement("option");
+    option.value = desc;
+    option.text = desc;
+    select.appendChild(option);
+  });
+
+  // Create amount input
+  const amountInput = document.createElement("input");
+  amountInput.name = "amount[]";
+  amountInput.type = "number";
+  amountInput.placeholder = "Amount";
+  amountInput.className = "w-full md:w-40 border rounded-lg px-3 py-2";
+
+  wrapper.appendChild(select);
+  wrapper.appendChild(amountInput);
+  container.appendChild(wrapper);
+
+  addListenersToAmountInputs(); // Add listener
+}
+ 
+
+</script>
+<script>
+  async function viewPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    // Colors
+    const blue = [56, 116, 203];
+    const gray = [100];
+    const dark = [33, 33, 33];
+    const green = [0, 128, 0];
+
+    // Form values
+    const transactionId = document.getElementById("transactionId").value;
+    const date = document.querySelector("input[name='date']").value;
+    const studentId = document.getElementById("studentId").value;
+    const studentName = document.getElementById("studentName").value;
+    const unit = document.querySelector("input[name='unit']").value;
+    const studentClass = document.querySelector("input[name='class']").value;
+    const classRoll = document.querySelector("input[name='classRoll']").value;
+
+    const descriptions = document.querySelectorAll("select[name='description[]'], textarea[name='description[]']");
+    const amounts = document.querySelectorAll("input[name='amount[]']");
+
+    // Header
+    doc.setFillColor(...blue);
+    doc.rect(0, 0, 210, 20, 'F');
+    doc.setFontSize(16);
+    doc.setTextColor(255);
+    doc.setFont("helvetica", "bold");
+    doc.text("Nuton Kuri Pre-Cadet", 105, 12, null, null, "center");
+
+    // Subheading
+    doc.setFontSize(13);
+    doc.setTextColor(...dark);
+    doc.setFont("helvetica", "bold");
+    doc.text("Student Fee Transaction", 105, 28, null, null, "center");
+
+    // Info Box
+    let y = 36;
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...gray);
+
+    const info = [
+      [`Transaction ID`, transactionId],
+      [`Date`, date],
+      [`Student ID`, studentId],
+      [`Student Name`, studentName],
+      [`Unit`, unit],
+      [`Class`, studentClass],
+      [`Class Roll`, classRoll],
+    ];
+
+    info.forEach(([label, value]) => {
+      doc.text(`${label}:`, 20, y);
+      doc.setTextColor(...dark);
+      doc.text(`${value}`, 60, y);
+      doc.setTextColor(...gray);
+      y += 8;
+    });
+
+    y += 4;
+
+    // Table Header
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...blue);
+    doc.text("Descriptions", 20, y);
+    doc.text("Amount (TAKA)", 180, y, null, null, 'right');
+
+    y += 4;
+    doc.setLineWidth(0.3);
+    doc.setDrawColor(...gray);
+    doc.line(20, y, 190, y);
+    y += 6;
+
+    // Table Data
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...dark);
+    let total = 0;
+
+    for (let i = 0; i < descriptions.length; i++) {
+      const desc = descriptions[i].value || "";
+      const amt = parseFloat(amounts[i].value) || 0;
+      total += amt;
+
+      doc.text(`${i + 1 } - ${desc}`, 22, y);
+      doc.text(`${amt.toFixed(2)}`, 180, y, null, null, 'right');
+      y += 8;
+    }
+
+    // Line
+    y += 2;
+    doc.line(20, y, 190, y);
+    y += 6;
+
+    // Total
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...green);
+    doc.text(`Total Amount`, 22, y);
+    doc.text(`${total.toFixed(2)} TAKA`, 180, y, null, null, 'right');
+
+    // Footer
+    y += 20;
+    doc.setTextColor(...gray);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "italic");
+    doc.text("Generated by RubidSoft Smart Fee System", 105, y, null, null, 'center');
+
+    // View
+    const blob = doc.output("blob");
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+  }
+</script>
+
+
+
+
