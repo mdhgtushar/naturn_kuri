@@ -1,0 +1,1 @@
+Natun kuri
